@@ -16,37 +16,62 @@ jobs:
       WF_ID_AUTO: 357466956
       WF_ID_MANUAL: 357466958
     steps:
-      - name: Clean workflow runs
+      - name: Clean Auto Update workflow (keep 1 latest)
         run: |
-          del_runs() {
-            WORKFLOW_ID=$1
-            KEEP_NUM=$2
-            echo -e "\n===== Processing Workflow ID: $WORKFLOW_ID , keep $KEEP_NUM ====="
-            RAW=$(curl -s \
-              -H "Accept: application/vnd.github+json" \
-              -H "Authorization: token $TOKEN" \
-              "https://api.github.com/repos/$REPO/actions/workflows/$WORKFLOW_ID/runs?per_page=100")
-            # --arg 把KEEP_NUM传入jq
-            DEL_IDS=$(echo "$RAW" | jq -r --arg kp "$KEEP_NUM" '.workflow_runs // [] | map(select(.conclusion != null)) | .[$kp | tonumber:][].id')
-            echo "Runs to delete:"
-            echo "$DEL_IDS"
-            echo "$DEL_IDS" | while read -r rid; do
-              if [ -n "$rid" ];then
-                echo ">> Deleting run id: $rid"
-                curl -s -X DELETE \
-                  -H "Accept: application/vnd.github+json" \
-                  -H "Authorization: token $TOKEN" \
-                  "https://api.github.com/repos/$REPO/actions/runs/$rid"
-                sleep 0.3
-              fi
-            done
-          }
+          RAW=$(curl -s \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: token $TOKEN" \
+            "https://api.github.com/repos/$REPO/actions/workflows/$WF_ID_AUTO/runs?per_page=100")
+          DEL_IDS=$(echo "$RAW" | jq -r '.workflow_runs // [] | map(select(.conclusion != null)) | .[1:][].id')
+          echo "Auto Update 待删除RUN："
+          echo "$DEL_IDS"
+          echo "$DEL_IDS" | while read -r rid; do
+            if [ -n "$rid" ];then
+              echo ">> 删除 run: $rid"
+              curl -s -X DELETE \
+                -H "Accept: application/vnd.github+json" \
+                -H "Authorization: token $TOKEN" \
+                "https://api.github.com/repos/$REPO/actions/runs/$rid"
+              sleep 0.3
+            fi
+          done
 
-          # Auto Update：保留最新1条
-          del_runs $WF_ID_AUTO 1
-          # Manual Update：保留最新1条
-          del_runs $WF_ID_MANUAL 1
-          # Clean自身：全部删除已完成记录，保留0条
-          del_runs ${{ github.workflow_id }} 0
+      - name: Clean Manual workflow (keep 1 latest)
+        run: |
+          RAW=$(curl -s \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: token $TOKEN" \
+            "https://api.github.com/repos/$REPO/actions/workflows/$WF_ID_MANUAL/runs?per_page=100")
+          DEL_IDS=$(echo "$RAW" | jq -r '.workflow_runs // [] | map(select(.conclusion != null)) | .[1:][].id')
+          echo "Manual 待删除RUN："
+          echo "$DEL_IDS"
+          echo "$DEL_IDS" | while read -r rid; do
+            if [ -n "$rid" ];then
+              echo ">> 删除 run: $rid"
+              curl -s -X DELETE \
+                -H "Accept: application/vnd.github+json" \
+                -H "Authorization: token $TOKEN" \
+                "https://api.github.com/repos/$REPO/actions/runs/$rid"
+              sleep 0.3
+            fi
+          done
 
-          echo -e "\n✅ 全部清理任务执行完成"
+      - name: Clean self Clean Auto Update Runs (delete all finished, keep 0)
+        run: |
+          RAW=$(curl -s \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: token $TOKEN" \
+            "https://api.github.com/repos/$REPO/actions/workflows/${{ github.workflow_id }}/runs?per_page=100")
+          DEL_IDS=$(echo "$RAW" | jq -r '.workflow_runs // [] | map(select(.conclusion != null)) | .[0:][].id')
+          echo "Clean自身 待删除RUN："
+          echo "$DEL_IDS"
+          echo "$DEL_IDS" | while read -r rid; do
+            if [ -n "$rid" ];then
+              echo ">> 删除 run: $rid"
+              curl -s -X DELETE \
+                -H "Accept: application/vnd.github+json" \
+                -H "Authorization: token $TOKEN" \
+                "https://api.github.com/repos/$REPO/actions/runs/$rid"
+              sleep 0.3
+            fi
+          done
