@@ -26,9 +26,8 @@ jobs:
               -H "Accept: application/vnd.github+json" \
               -H "Authorization: token $TOKEN" \
               "https://api.github.com/repos/$REPO/actions/workflows/$WORKFLOW_ID/runs?per_page=100")
-            # API返回：最新记录在数组头部
-            # jq直接切片：跳过前KEEP_NUM条，取出后面所有待删id
-            DEL_IDS=$(echo "$RAW" | jq -r '.workflow_runs // [] | map(select(.conclusion != null)) | .[$KEEP_NUM:][].id')
+            # --arg 把KEEP_NUM传入jq
+            DEL_IDS=$(echo "$RAW" | jq -r --arg kp "$KEEP_NUM" '.workflow_runs // [] | map(select(.conclusion != null)) | .[$kp | tonumber:][].id')
             echo "Runs to delete:"
             echo "$DEL_IDS"
             echo "$DEL_IDS" | while read -r rid; do
