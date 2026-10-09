@@ -1,7 +1,6 @@
 name: Clean Auto Update Runs
 on:
   schedule:
-    # UTC22点 = 北京时间早上6点
     - cron: "0 22 * * *"
   workflow_dispatch:
 
@@ -19,7 +18,7 @@ jobs:
     steps:
       - name: Clean workflow runs
         run: |
-          # Auto Update 保留最新1条
+          # ========== Auto Update：保留最新1条，其余删除 ==========
           echo "===== Processing Auto Update ====="
           RAW=$(curl -s \
             -H "Accept: application/vnd.github+json" \
@@ -37,7 +36,7 @@ jobs:
             fi
           done
 
-          # Manual Update 保留最新1条
+          # ========== Manual Update：保留最新1条，其余删除 ==========
           echo -e "\n===== Processing Manual Update ====="
           RAW_MANUAL=$(curl -s \
             -H "Accept: application/vnd.github+json" \
@@ -54,3 +53,22 @@ jobs:
               sleep 0.3
             fi
           done
+
+          # ========== Clean自身工作流：全部删除已完成run ==========
+          echo -e "\n===== Processing Clean Auto Update Runs (self) ====="
+          SELF_RAW=$(curl -s \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: token $TOKEN" \
+            "https://api.github.com/repos/$REPO/actions/workflows/${{ github.workflow_id }}/runs?per_page=100")
+          SELF_IDS=$(echo "$SELF_RAW" | jq -r '.workflow_runs | map(select(.conclusion != null)) | sort_by(-(.created_at | fromdateiso8601)) | .[].id')
+          echo "$SELF_IDS" | while read rid; do
+            if [ -n "$rid" ];then
+              echo "Delete Self run id: $rid"
+              curl -s -X DELETE \
+                -H "Accept: application/vnd.github+json" \
+                -H "Authorization: token $TOKEN" \
+                "https://api.github.com/repos/$REPO/actions/runs/$rid"
+              sleep 0.3
+            fi
+          done
+          echo -e "\n✅ 全部清理任务执行完成"
