@@ -24,7 +24,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: token $TOKEN" \
             "https://api.github.com/repos/$REPO/actions/workflows/$WF_ID_AUTO/runs?per_page=100")
-          IDS=$(echo "$RAW" | jq -r '.workflow_runs | map(select(.conclusion != null)) | sort_by(-(.created_at | fromdateiso8601)) | .[1:][].id')
+          IDS=$(echo "$RAW" | jq -r '.workflow_runs // [] | map(select(.conclusion != null)) | sort_by(-(.created_at | fromdateiso8601)) | .[1:][].id')
           echo "$IDS" | while read rid; do
             if [ -n "$rid" ];then
               echo "Delete AutoUpdate run id: $rid"
@@ -42,7 +42,8 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: token $TOKEN" \
             "https://api.github.com/repos/$REPO/actions/workflows/$WF_ID_MANUAL/runs?per_page=100")
-          IDS_MANUAL=$(echo "$RAW_MANUAL" | jq -r '.workflow_runs | map(select(.conclusion != null)) | sort_by(-(.created_at | fromdateiso8601)) | .[1:][].id')
+          # // [] 关键修复：如果.workflow_runs为null，替换为空数组，防止jq报错
+          IDS_MANUAL=$(echo "$RAW_MANUAL" | jq -r '.workflow_runs // [] | map(select(.conclusion != null)) | sort_by(-(.created_at | fromdateiso8601)) | .[1:][].id')
           echo "$IDS_MANUAL" | while read rid; do
             if [ -n "$rid" ];then
               echo "Delete ManualUpdate run id: $rid"
@@ -60,7 +61,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: token $TOKEN" \
             "https://api.github.com/repos/$REPO/actions/workflows/${{ github.workflow_id }}/runs?per_page=100")
-          SELF_IDS=$(echo "$SELF_RAW" | jq -r '.workflow_runs | map(select(.conclusion != null)) | sort_by(-(.created_at | fromdateiso8601)) | .[].id')
+          SELF_IDS=$(echo "$SELF_RAW" | jq -r '.workflow_runs // [] | map(select(.conclusion != null)) | sort_by(-(.created_at | fromdateiso8601)) | .[].id')
           echo "$SELF_IDS" | while read rid; do
             if [ -n "$rid" ];then
               echo "Delete Self run id: $rid"
