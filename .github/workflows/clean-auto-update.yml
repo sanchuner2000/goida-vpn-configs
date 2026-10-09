@@ -18,58 +18,39 @@ jobs:
     steps:
       - name: Clean workflow runs
         run: |
-          # ========== Auto Update：保留最新1条，其余删除 ==========
-          echo "===== Processing Auto Update ====="
-          RAW=$(curl -s \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: token $TOKEN" \
-            "https://api.github.com/repos/$REPO/actions/workflows/$WF_ID_AUTO/runs?per_page=100")
-          IDS=$(echo "$RAW" | jq -r '.workflow_runs // [] | map(select(.conclusion != null)) | sort_by(-(.created_at | fromdateiso8601)) | .[1:][].id')
-          echo "$IDS" | while read rid; do
-            if [ -n "$rid" ];then
-              echo "Delete AutoUpdate run id: $rid"
-              curl -s -X DELETE \
-                -H "Accept: application/vnd.github+json" \
-                -H "Authorization: token $TOKEN" \
-                "https://api.github.com/repos/$REPO/actions/runs/$rid"
-              sleep 0.3
-            fi
-          done
+          del_runs() {
+            WORKFLOW_ID=$1
+            KEEP_NUM=$2
+            echo -e "\n===== Processing Workflow ID: $WORKFLOW_ID ====="
+            RAW=$(curl -s \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: token $TOKEN" \
+              "https://api.github.com/repos/$REPO/actions/workflows/$WORKFLOW_ID/runs?per_page=100")
+            # 取出所有已结束run，API默认：最新的排在数组最前面
+            ALL_IDS=$(echo "$RAW" | jq -r '.workflow_runs // [] | map(select(.conclusion != null)) | .[].id')
+            echo "All finished run IDs: "
+            echo "$ALL_IDS"
+            # 跳过前KEEP_NUM条，后面全部删除
+            DEL_IDS=$(echo "$ALL_IDS" | tail -n +$((KEEP_NUM+1)))
+            echo "Runs to delete:"
+            echo "$DEL_IDS"
+            echo "$DEL_IDS" | while read rid; do
+              if [ -n "$rid" ];then
+                echo ">> Deleting run id: $rid"
+                curl -s -X DELETE \
+                  -H "Accept: application/vnd.github+json" \
+                  -H "Authorization: token $TOKEN" \
+                  "https://api.github.com/repos/$REPO/actions/runs/$rid"
+                sleep 0.3
+              fi
+            done
+          }
 
-          # ========== Manual Update：保留最新1条，其余删除 ==========
-          echo -e "\n===== Processing Manual Update ====="
-          RAW_MANUAL=$(curl -s \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: token $TOKEN" \
-            "https://api.github.com/repos/$REPO/actions/workflows/$WF_ID_MANUAL/runs?per_page=100")
-          # // [] 关键修复：如果.workflow_runs为null，替换为空数组，防止jq报错
-          IDS_MANUAL=$(echo "$RAW_MANUAL" | jq -r '.workflow_runs // [] | map(select(.conclusion != null)) | sort_by(-(.created_at | fromdateiso8601)) | .[1:][].id')
-          echo "$IDS_MANUAL" | while read rid; do
-            if [ -n "$rid" ];then
-              echo "Delete ManualUpdate run id: $rid"
-              curl -s -X DELETE \
-                -H "Accept: application/vnd.github+json" \
-                -H "Authorization: token $TOKEN" \
-                "https://api.github.com/repos/$REPO/actions/runs/$rid"
-              sleep 0.3
-            fi
-          done
+          # Auto Update：保留最新1条
+          del_runs $WF_ID_AUTO 1
+          # Manual Update：保留最新1条
+          del_runs $WF_ID_MANUAL 1
+          # Clean自身：全部删除已完成记录，保留0条
+          del_runs ${{ github.workflow_id }} 0
 
-          # ========== Clean自身工作流：全部删除已完成run ==========
-          echo -e "\n===== Processing Clean Auto Update Runs (self) ====="
-          SELF_RAW=$(curl -s \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: token $TOKEN" \
-            "https://api.github.com/repos/$REPO/actions/workflows/${{ github.workflow_id }}/runs?per_page=100")
-          SELF_IDS=$(echo "$SELF_RAW" | jq -r '.workflow_runs // [] | map(select(.conclusion != null)) | sort_by(-(.created_at | fromdateiso8601)) | .[].id')
-          echo "$SELF_IDS" | while read rid; do
-            if [ -n "$rid" ];then
-              echo "Delete Self run id: $rid"
-              curl -s -X DELETE \
-                -H "Accept: application/vnd.github+json" \
-                -H "Authorization: token $TOKEN" \
-                "https://api.github.com/repos/$REPO/actions/runs/$rid"
-              sleep 0.3
-            fi
-          done
           echo -e "\n✅ 全部清理任务执行完成"
