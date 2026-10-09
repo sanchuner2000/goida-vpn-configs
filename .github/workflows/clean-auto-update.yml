@@ -21,20 +21,17 @@ jobs:
           del_runs() {
             WORKFLOW_ID=$1
             KEEP_NUM=$2
-            echo -e "\n===== Processing Workflow ID: $WORKFLOW_ID ====="
+            echo -e "\n===== Processing Workflow ID: $WORKFLOW_ID , keep $KEEP_NUM ====="
             RAW=$(curl -s \
               -H "Accept: application/vnd.github+json" \
               -H "Authorization: token $TOKEN" \
               "https://api.github.com/repos/$REPO/actions/workflows/$WORKFLOW_ID/runs?per_page=100")
-            # 取出所有已结束run，API默认：最新的排在数组最前面
-            ALL_IDS=$(echo "$RAW" | jq -r '.workflow_runs // [] | map(select(.conclusion != null)) | .[].id')
-            echo "All finished run IDs: "
-            echo "$ALL_IDS"
-            # 跳过前KEEP_NUM条，后面全部删除
-            DEL_IDS=$(echo "$ALL_IDS" | tail -n +$((KEEP_NUM+1)))
+            # API返回：最新记录在数组头部
+            # jq直接切片：跳过前KEEP_NUM条，取出后面所有待删id
+            DEL_IDS=$(echo "$RAW" | jq -r '.workflow_runs // [] | map(select(.conclusion != null)) | .[$KEEP_NUM:][].id')
             echo "Runs to delete:"
             echo "$DEL_IDS"
-            echo "$DEL_IDS" | while read rid; do
+            echo "$DEL_IDS" | while read -r rid; do
               if [ -n "$rid" ];then
                 echo ">> Deleting run id: $rid"
                 curl -s -X DELETE \
