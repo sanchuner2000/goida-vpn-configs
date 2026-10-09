@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -32,21 +33,17 @@ jobs:
           GIT_COMMITTER_NAME: "github-actions[bot]"
           GIT_COMMITTER_EMAIL: "github-actions[bot]@users.noreply.github.com"
         run: cd source && python main.py
-
-      # ========== 新增：自动清理 Auto Update 历史运行，只保留最新1条 ==========
+      # ========== 修复：使用数字Workflow ID，不再用名称，actions权限补上 ==========
       - name: Clean old Auto Update runs, keep only 1 latest
         env:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
-          # 工作流名称，和name保持一致
-          WORKFLOW_NAME="Auto Update"
+          WORKFLOW_ID="357466956"
           REPO=${{ github.repository }}
-          # 获取已完成的run列表，按创建时间倒序，过滤掉正在运行的
           RUNS=$(gh api -H "X-GitHub-Api-Version:2022-11-28" \
-            "/repos/$REPO/actions/workflows/$WORKFLOW_NAME/runs" \
+            "/repos/$REPO/actions/workflows/$WORKFLOW_ID/runs" \
             --paginate \
             --jq '.workflow_runs[] | select(.conclusion != null) | .id')
-          # 转为数组
           RUN_ARR=($RUNS)
           TOTAL=${#RUN_ARR[@]}
           echo "Total completed runs found: $TOTAL"
@@ -54,7 +51,6 @@ jobs:
             echo "No old runs to delete."
             exit 0
           fi
-          # 跳过第0个（最新一条），其余全部删除
           for ((i=1; i<TOTAL; i++)); do
             RUN_ID=${RUN_ARR[$i]}
             echo "Deleting run id: $RUN_ID"
